@@ -298,3 +298,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local training datasets and baseline artifacts
+/data/
+/runs/
