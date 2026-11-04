@@ -1,4 +1,7 @@
 ###### Specific ######
+misc/data
+misc/runs
+misc/test_*
 misc/test_data/.*
 .vscode
 .typings
