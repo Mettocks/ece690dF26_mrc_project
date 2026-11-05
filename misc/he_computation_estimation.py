@@ -10,8 +10,6 @@ from torchvision.models import vgg16
 from torch.nn.modules.utils import _pair
 
 
-
-
 POLY_DEGREE = 2**14
 
 # BFVRNS estimator settings. Bit widths describe moduli, not storage words.
@@ -892,9 +890,11 @@ def print_he_storage(he):
           "(excludes keys, client encoding staging and temporary workspace; not peak memory)")
 
 
-def main():
+def fully_analyze_model(model):
     # Weights do not affect the analytical count; avoid downloading them.
-    model = vgg16(weights=None)
+    print(model)
+    print("")
+
     result = model_to_ops(model, verbose=True)
     print(f"Linear-layer MACs: {result['total_linear_macs']:,}")
     print(f"Nonlinear-layer comparisons: {result['total_nonlinear_comparisons']:,}")
@@ -944,4 +944,5 @@ def main():
     print_he_storage(he)
 
 if __name__ == "__main__":
-    main()
+    model = vgg16(weights=None)
+    fully_analyze_model(model)
