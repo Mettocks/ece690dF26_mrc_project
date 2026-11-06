@@ -105,6 +105,18 @@ def run_epoch(model, loader, device, optimizer=None, accumulation_steps=1, log_i
     model.train(training)
     totals = torch.zeros(4, device=device, dtype=torch.float64)
     group_samples = 0
+    step = 0
+    try:
+        total_steps = len(loader)
+    except TypeError:  # Hugging Face streaming/other unsized iterable loaders.
+        total_steps = None
+
+    def finish_accumulation():
+        for parameter in model.parameters():
+            if parameter.grad is not None:
+                parameter.grad.div_(group_samples)
+        optimizer.step()
+        optimizer.zero_grad(set_to_none=True)
 
     if training:
         optimizer.zero_grad(set_to_none=True)
@@ -119,13 +131,9 @@ def run_epoch(model, loader, device, optimizer=None, accumulation_steps=1, log_i
             if training:
                 loss.backward()
                 group_samples += targets.size(0)
-                if step % accumulation_steps == 0 or step == len(loader):
+                if step % accumulation_steps == 0:
                     # Normalize actual samples, including partial final batches/groups.
-                    for parameter in model.parameters():
-                        if parameter.grad is not None:
-                            parameter.grad.div_(group_samples)
-                    optimizer.step()
-                    optimizer.zero_grad(set_to_none=True)
+                    finish_accumulation()
                     group_samples = 0
             with torch.no_grad():
                 predictions = logits.topk(min(5, logits.size(1)), dim=1).indices
@@ -134,9 +142,16 @@ def run_epoch(model, loader, device, optimizer=None, accumulation_steps=1, log_i
                 totals[1] += correct[:, 0].sum()
                 totals[2] += correct.any(dim=1).sum()
                 totals[3] += targets.size(0)
-            if step % log_interval == 0 or step == len(loader):
-                print(f"{'train' if training else 'val'} {step}/{len(loader)} "
+            if step % log_interval == 0 or step == total_steps:
+                print(f"{'train' if training else 'val'} {step}/{total_steps or '?'} "
                       f"loss={totals[0].item() / totals[3].item():.4f}", flush=True)
+    # Iterable loaders need not expose a length; flush the last partial group
+    # when iteration ends rather than relying on a predicted last batch index.
+    if training and group_samples:
+        finish_accumulation()
+    if step and total_steps is None and step % log_interval:
+        print(f"{'train' if training else 'val'} {step}/end "
+              f"loss={totals[0].item() / totals[3].item():.4f}", flush=True)
     loss_sum, top1, top5, count = totals.tolist()
 
     if count == 0:
